@@ -114,11 +114,11 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     let height = 2304;
     let filename = "mandelbrot_screenshot.ppm";
 
-    // Note: Screenshots use a 1:1 pixel ratio, so we don't use terminal's aspect_correction
     let x_scale = cam.zoom * (3.5 / width as f64);
     let y_scale = cam.zoom * (2.0 / height as f64);
 
-    let mut pixels = Vec::with_capacity(width * height);
+    // Store both the RGB and the iteration count to decide where to blur
+    let mut pixel_data = Vec::with_capacity(width * height);
 
     for y in 0..height {
         for x in 0..width {
@@ -134,54 +134,60 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
                 i += 1;
             }
 
-            pixels.push(iteration_to_rgb(i, MAX_ITER));
+            pixel_data.push((iteration_to_rgb(i, MAX_ITER), i));
         }
     }
 
-    // Apply basic box blur
-    let blur_radius = 2;
-    let mut blurred_pixels = pixels.clone();
+    // Only blur "low-end" iterations. 
+    // We'll define a threshold based on the local view's max potential iterations.
+    // In this case, we'll use a fixed threshold of 20% of MAX_ITER as "low-end".
+    let blur_threshold = MAX_ITER / 5; 
+    let blur_radius = 4;
+    let mut final_pixels = Vec::with_capacity(width * height);
 
     for y in 0..height {
         for x in 0..width {
-            let mut r_sum = 0u32;
-            let mut g_sum = 0u32;
-            let mut b_sum = 0u32;
-            let mut count = 0u32;
+            let ((r, g, b), iter) = pixel_data[y * width + x];
 
-            for dy in -(blur_radius as i32)..=(blur_radius as i32) {
-                for dx in -(blur_radius as i32)..=(blur_radius as i32) {
-                    let nx = x as i32 + dx;
-                    let ny = y as i32 + dy;
+            if iter > blur_threshold && iter != 0 {
+                // This is a low-iteration area, apply blur
+                let mut r_sum = 0u32;
+                let mut g_sum = 0u32;
+                let mut b_sum = 0u32;
+                let mut count = 0u32;
 
-                    if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
-                        let (r, g, b) = pixels[(ny as usize * width + nx as usize)];
-                        r_sum += r as u32;
-                        g_sum += g as u32;
-                        b_sum += b as u32;
-                        count += 1;
+                for dy in -(blur_radius as i32)..=(blur_radius as i32) {
+                    for dx in -(blur_radius as i32)..=(blur_radius as i32) {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+
+                        if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
+                            let ((pr, pg, pb), _) = pixel_data[(ny as usize * width + nx as usize)];
+                            r_sum += pr as u32;
+                            g_sum += pg as u32;
+                            b_sum += pb as u32;
+                            count += 1;
+                        }
                     }
                 }
+                final_pixels.push(((r_sum / count) as u8, (g_sum / count) as u8, (b_sum / count) as u8));
+            } else {
+                // High-end iterations or the set itself: keep sharp
+                final_pixels.push((r, g, b));
             }
-            blurred_pixels[y * width + x] = (
-                (r_sum / count) as u8,
-                (g_sum / count) as u8,
-                (b_sum / count) as u8,
-            );
         }
     }
 
     let file = File::create(filename)?;
     let mut writer = BufWriter::new(file);
 
-    // PPM Header: P3 means colors are in ASCII, then width, height, and max color value (255)
     writeln!(writer, "P3\n{} {}\n255", width, height)?;
 
-    for (r, g, b) in blurred_pixels {
+    for (r, g, b) in final_pixels {
         writeln!(writer, "{} {} {}", r, g, b)?;
     }
 
-    println!("\nScreenshot saved (with blur) to {}", filename);
+    println!("\nScreenshot saved (selective blur) to {}", filename);
     Ok(())
 }
 
@@ -192,7 +198,6 @@ fn render(cam: &Camera) -> String {
     let width = (ccols as f64);
     let height = (crows as f64);
 
-    // Aspect ratio correction: terminal characters are taller than they are wide
     let aspect_correction = 2.0; 
     let x_scale = cam.zoom * (3.5 / width);
     let y_scale = cam.zoom * (2.0 / height) * aspect_correction;
@@ -201,7 +206,6 @@ fn render(cam: &Camera) -> String {
     
     for y in 0..crows {
         for x in 0..ccols {
-            // Map pixel (x, y) to complex plane (re, im)
             let re = cam.center.re + (x as f64 - width / 2.0) * x_scale;
             let im = cam.center.im + (y as f64 - height / 2.0) * y_scale;
 
@@ -227,25 +231,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = stdout();
     let mut cam = Camera::new();
 
-    // Setup terminal: raw mode and alternate screen
     terminal::enable_raw_mode()?;
     execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
     loop {
-        // Render and draw
         let frame = render(&cam);
         execute!(stdout, cursor::MoveTo(0, 0))?;
         write!(stdout, "{}", frame)?;
         write!(stdout, "\x1b[0m [WASD/Arrows]: Move | +/-: Zoom | Q: Quit | Zoom: {:.4}", cam.zoom)?;
         stdout.flush()?;
 
-        // Handle Input
         if event::poll(std::time::Duration::from_millis(16))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('k') => {
-                        // Temporarily leave raw mode or just print to stderr so the user knows it's saving
                         save_screenshot(&cam).expect("Failed to save screenshot");
                     }
                     KeyCode::Char('+') | KeyCode::Char('=') => cam.zoom_in(),
@@ -260,7 +260,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Restore terminal
     execute!(stdout, terminal::LeaveAlternateScreen, cursor::Show)?;
     terminal::disable_raw_mode()?;
     Ok(())
