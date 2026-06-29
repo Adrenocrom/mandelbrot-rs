@@ -118,11 +118,7 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     let x_scale = cam.zoom * (3.5 / width as f64);
     let y_scale = cam.zoom * (2.0 / height as f64);
 
-    let file = File::create(filename)?;
-    let mut writer = BufWriter::new(file);
-
-    // PPM Header: P3 means colors are in ASCII, then width, height, and max color value (255)
-    writeln!(writer, "P3\n{} {}\n255", width, height)?;
+    let mut pixels = Vec::with_capacity(width * height);
 
     for y in 0..height {
         for x in 0..width {
@@ -138,11 +134,54 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
                 i += 1;
             }
 
-            let (r, g, b) = iteration_to_rgb(i, MAX_ITER);
-            writeln!(writer, "{} {} {}", r, g, b)?;
+            pixels.push(iteration_to_rgb(i, MAX_ITER));
         }
     }
-    println!("\nScreenshot saved to {}", filename);
+
+    // Apply basic box blur
+    let blur_radius = 2;
+    let mut blurred_pixels = pixels.clone();
+
+    for y in 0..height {
+        for x in 0..width {
+            let mut r_sum = 0u32;
+            let mut g_sum = 0u32;
+            let mut b_sum = 0u32;
+            let mut count = 0u32;
+
+            for dy in -(blur_radius as i32)..=(blur_radius as i32) {
+                for dx in -(blur_radius as i32)..=(blur_radius as i32) {
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+
+                    if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
+                        let (r, g, b) = pixels[(ny as usize * width + nx as usize)];
+                        r_sum += r as u32;
+                        g_sum += g as u32;
+                        b_sum += b as u32;
+                        count += 1;
+                    }
+                }
+            }
+            blurred_pixels[y * width + x] = (
+                (r_sum / count) as u8,
+                (g_sum / count) as u8,
+                (b_sum / count) as u8,
+            );
+        }
+    }
+
+    let file = File::create(filename)?;
+    let mut writer = BufWriter::new(file);
+
+    // PPM Header: P3 means colors are in ASCII, then width, height, and max color value (255)
+    writeln!(writer, "P3\n{} {}\n255", width, height)?;
+
+    for (r, g, b) in blurred_pixels {
+        writeln!(writer, "{} {} {}", r, g, b)?;
+    }
+
+    println!("\nScreenshot saved (with blur) to {}", filename);
     Ok(())
 }
 
