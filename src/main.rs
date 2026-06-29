@@ -142,7 +142,7 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     // We'll define a threshold based on the local view's max potential iterations.
     // In this case, we'll use a fixed threshold of 20% of MAX_ITER as "low-end".
     let blur_threshold = MAX_ITER / 5; 
-    let blur_radius = 4;
+    let blur_radius = 2;
     let mut final_pixels = Vec::with_capacity(width * height);
 
     for y in 0..height {
