@@ -1,8 +1,8 @@
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{self, Event, KeyCode},
     execute,
-    terminal::{self, ClearType},
+    terminal::{self},
 };
 use num_complex::Complex64;
 use std::fs::File;
@@ -34,7 +34,7 @@ impl Camera {
     fn zoom_out(&mut self) { self.zoom *= 1.1; }
 }
 
-fn get_rgb_values(iter: u32) -> (u8, u8, u8) {
+fn _get_rgb_values(iter: u32) -> (u8, u8, u8) {
     if iter == MAX_ITER {
         return (0, 0, 0); // Black for inside the set
     }
@@ -162,7 +162,7 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
                         let ny = y as i32 + dy;
 
                         if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
-                            let ((pr, pg, pb), _) = pixel_data[(ny as usize * width + nx as usize)];
+                            let ((pr, pg, pb), _) = pixel_data[ny as usize * width + nx as usize];
                             r_sum += pr as u32;
                             g_sum += pg as u32;
                             b_sum += pb as u32;
@@ -195,8 +195,8 @@ fn render(cam: &Camera) -> String {
     let (cols, rows) = terminal::size().unwrap_or((80, 24));
     let ccols = cols;
     let crows = rows;
-    let width = (ccols as f64);
-    let height = (crows as f64);
+    let width = ccols as f64;
+    let height = crows as f64;
 
     let aspect_correction = 2.0; 
     let x_scale = cam.zoom * (3.5 / width);
