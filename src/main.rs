@@ -51,33 +51,37 @@ fn timestamp() -> String {
     Local::now().format("%Y%m%d_%H%M%S").to_string()
 }
 
-fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
-    if iter == max_iter {
-        return (1, 1, 1);
-    }
+fn hsv_to_rgb(h_deg: f64, s: f64, v: f64) -> (u8,u8,u8) {
+    let h = h_deg / 60.0;
+    let i = h.floor() as i32;
+    let f = h - i as f64;
 
-    let norm = iter as f64 / max_iter as f64;          // < 1
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - f * s);
+    let t = v * (1.0 - (1.0 - f) * s);
 
-    let hue_deg = 120.0 + norm * 120.0;     // 120 .. 240
-    let h = hue_deg / 60.0;                 // segment index [2,4]
-    let f = h - (h as i32) as f64;
-    let t = f;
-
-    // Interpolate RGB based on hue segment
-    let (r_raw, g_raw, b_raw) = if h < 3.0 {
-        // segment 2 → green→cyan: R=0, G=1, B=f
-        (1.0, 0.0, t)
-    } else {
-        // segment 4 → cyan→blue: R=p, G=t, B=1
-        (1.0, 0.0, t)
+    let (r, g, b) = match i {
+        0 => (v, t, p),
+        1 => (q, v, p),
+        2 => (p, v, t),
+        3 => (p, q, v),
+        4 => (t, p, v),
+        _ => (v, p, q), // i == 5
     };
 
-    let brightness = norm.powf(0.7); 
-    let r = (r_raw * brightness * 255.0) as u8;
-    let g = (g_raw * brightness * 255.0) as u8;
-    let b = (b_raw * brightness * 255.0) as u8;
+    let to_byte = |x: f64| ((x.powf(1.0/2.2) * 255.0).clamp(0.0, 255.0)) as u8;
+    (to_byte(r), to_byte(g), to_byte(b))
+}
 
-    (r, g, b)
+pub fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8,u8,u8) {
+    if iter >= max_iter { return (0,0,0); }
+
+    let t = iter as f64 / max_iter as f64;
+    let h_deg = 240.0 + 120.0 * t;     // blue→red
+    let s   = 1.0;
+    let v   = t.powf(0.7);
+
+    hsv_to_rgb(h_deg, s, v)
 }
 
 fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
