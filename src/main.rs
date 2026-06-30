@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode},
@@ -141,7 +143,7 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     // Only blur "low-end" iterations. 
     // We'll define a threshold based on the local view's max potential iterations.
     // In this case, we'll use a fixed threshold of 20% of MAX_ITER as "low-end".
-    let blur_threshold = MAX_ITER / 5; 
+    let blur_threshold = MAX_ITER / 10; 
     let blur_radius = 2;
     let mut final_pixels = Vec::with_capacity(width * height);
 
@@ -149,7 +151,7 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
         for x in 0..width {
             let ((r, g, b), iter) = pixel_data[y * width + x];
 
-            if iter > blur_threshold && iter != 0 {
+            if false && iter > blur_threshold && iter != 0 {
                 // This is a low-iteration area, apply blur
                 let mut r_sum = 0u32;
                 let mut g_sum = 0u32;
@@ -193,19 +195,17 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
 
 fn render(cam: &Camera) -> String {
     let (cols, rows) = terminal::size().unwrap_or((80, 24));
-    let ccols = cols;
-    let crows = rows;
-    let width = ccols as f64;
-    let height = crows as f64;
+    let width = cols as f64;
+    let height = rows as f64;
 
-    let aspect_correction = 2.0; 
+    let aspect_correction = 2.0;
     let x_scale = cam.zoom * (3.5 / width);
     let y_scale = cam.zoom * (2.0 / height) * aspect_correction;
 
-    let mut buffer = String::with_capacity(ccols as usize * crows as usize * 20);
-    
-    for y in 0..crows {
-        for x in 0..ccols {
+    // We'll build a vector of lines, then join them at the end
+    let lines: Vec<String> = (0..rows).into_par_iter().map(|y| {
+        let mut line = String::with_capacity(cols as usize * 12);
+        for x in 0..cols {
             let re = cam.center.re + (x as f64 - width / 2.0) * x_scale;
             let im = cam.center.im + (y as f64 - height / 2.0) * y_scale;
 
@@ -218,9 +218,16 @@ fn render(cam: &Camera) -> String {
                 i += 1;
             }
 
-            buffer.push_str(&get_rgb_color(i));
-            buffer.push('█');
+            line.push_str(&get_rgb_color(i));
+            line.push('█');
         }
+        line
+    }).collect();
+
+    // Join all lines with the required CRLF sequence
+    let mut buffer = String::new();
+    for l in lines {
+        buffer.push_str(&l);
         buffer.push('\n');
         buffer.push('\r');
     }
