@@ -11,6 +11,8 @@ use crossterm::{
 use num_complex::Complex64;
 use std::{io::{Write, stdout}};
 
+use chrono::Local;
+
 const MAX_ITER: u32 = 1000;
 
 struct Camera {
@@ -43,6 +45,10 @@ fn fg(r: u8, g: u8, b: u8) -> String {
 
 fn bg(r: u8, g: u8, b: u8) -> String {
     format!("\x1b[48;2;{};{};{}m", r, g, b)
+}
+
+fn timestamp() -> String {
+    Local::now().format("%Y%m%d_%H%M%S").to_string()
 }
 
 // --- Color palette ------------------------------------------------------------
@@ -96,7 +102,8 @@ fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
 fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     let width = 4096;
     let height = 2304;
-    let filename = "mandelbrot_screenshot_time.png";
+    let timestamp = timestamp();                     // ← from the helper above
+    let filename = format!("mandelbrot_{}.png", timestamp);
 
     let x_scale = cam.zoom * (3.5 / width as f64);
     let y_scale = cam.zoom * (2.0 / height as f64);
@@ -168,8 +175,8 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
         let y = (i / width) as u32;
         img.put_pixel(x, y, image::Rgb([pixel.0, pixel.1, pixel.2]));
     }
-    let _ = img.save(filename);
-    println!("\nScreenshot saved (selective blur) to {}", filename);
+    let _ = img.save(&filename);
+    println!("\nScreenshot saved (selective blur) to {}", &filename);
     Ok(())
 }
 
