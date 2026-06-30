@@ -51,6 +51,60 @@ fn timestamp() -> String {
     Local::now().format("%Y%m%d_%H%M%S").to_string()
 }
 
+struct ColorStop {
+    position: f64, // 0.0 to 1.0
+    color: (f64, f64, f64), // R, G, B as 0.0 to 1.0
+}
+
+fn get_palette() -> Vec<ColorStop> {
+    vec![
+        ColorStop { position: 0.0, color: (0.0, 0.0, 0.5) }, // Deep Blue
+        ColorStop { position: 0.25, color: (0.0, 1.0, 0.0) }, // Green
+        ColorStop { position: 0.5, color: (1.0, 1.0, 1.0) },   // White
+        ColorStop { position: 0.75, color: (1.0, 0.0, 0.0) },  // Red
+        ColorStop { position: 1.0, color: (0.2, 0.0, 0.0) },   // Dark Red (end)
+    ]
+}
+
+pub fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
+    if iter >= max_iter {
+        return (0, 0, 0); // The Mandelbrot set itself is black
+    }
+
+    // t is our position in the gradient (0.0 to 1.0)
+    let t = iter as f64 / max_iter as f64;
+    let palette = get_palette();
+
+    // 1. Find which two color stops t falls between
+    let mut lower = 0;
+    let mut upper = palette.len() - 1;
+
+    for i in 0..palette.len() - 1 {
+        if t >= palette[i].position && t <= palette[i+1].position {
+            lower = i;
+            upper = i + 1;
+            break;
+        }
+    }
+
+    let stop_low = &palette[lower];
+    let stop_high = &palette[upper];
+
+    // 2. Calculate local interpolation factor (0.0 to 1.0) between these two stops
+    let range = stop_high.position - stop_low.position;
+    let local_t = if range == 0.0 { 0.0 } else { (t - stop_low.position) / range };
+
+    // 3. Linearly interpolate RGB channels
+    let r = stop_low.color.0 + local_t * (stop_high.color.0 - stop_low.color.0);
+    let g = stop_low.color.1 + local_t * (stop_high.color.1 - stop_low.color.1);
+    let b = stop_low.color.2 + local_t * (stop_high.color.2 - stop_low.color.2);
+
+    // 4. Apply Gamma Correction for better visual contrast
+    let gamma_correct = |x: f64| ((x.powf(1.0 / 2.2) * 255.0).clamp(0.0, 255.0)) as u8;
+
+    (gamma_correct(r), gamma_correct(g), gamma_correct(b))
+}
+
 fn hsv_to_rgb(h_deg: f64, s: f64, v: f64) -> (u8,u8,u8) {
     let h = h_deg / 60.0;
     let i = h.floor() as i32;
@@ -73,7 +127,7 @@ fn hsv_to_rgb(h_deg: f64, s: f64, v: f64) -> (u8,u8,u8) {
     (to_byte(r), to_byte(g), to_byte(b))
 }
 
-pub fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8,u8,u8) {
+pub fn _iteration_to_rgb(iter: u32, max_iter: u32) -> (u8,u8,u8) {
     if iter >= max_iter { return (0,0,0); }
 
     let t = iter as f64 / max_iter as f64;
