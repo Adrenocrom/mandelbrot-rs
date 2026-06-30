@@ -30,7 +30,7 @@ Run the compiled binary:
 
 ## Screenshot
 
-![Mandelbrot Screenshot](mandelbrot_screenshot.png)
+![Mandelbrot Screenshot](example.png)
 
 ## License
 
