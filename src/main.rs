@@ -236,58 +236,57 @@ fn mandelbrot_iter(c: Complex64, max_iter: u32) -> u32 {
 }
 
 fn render_half(cam: &Camera) -> String {
-    // terminal size in *cells*
+    // terminal size in character cells
     let (cols, rows) = terminal::size().unwrap_or((80, 24));
-    let cols_f = cols as f64;
-    let rows_f = rows as f64;
 
-    // We will combine two image rows into one terminal line,
-    // so the vertical scale must be halved.
-    let aspect_correction = 2.0;                // to keep the shape square
-    let x_scale = cam.zoom * (3.5 / cols_f);
-    let y_scale = cam.zoom * (2.0 / rows_f) * aspect_correction;
+    // Each terminal row represents two image rows.
+    // We therefore need twice the vertical resolution.
+    let img_rows = rows as f64 * 2.0;
+    let img_cols = cols as f64;
 
-    let mut out_lines: Vec<String> = Vec::with_capacity(rows.into());
+    // --- scaling ------------------------------------------------------------
+    // The Mandelbrot domain is roughly [-2.5, +1] × [-1, +1].
+    // We map that onto the pixel grid.
+    let x_scale = cam.zoom * (3.5 / img_cols);          // width   : 3.5
+    let y_scale = cam.zoom * (2.0  / img_rows);         // height  : 2.0
 
-    for y in 0..rows {
-        // upper pixel (row y)
-        let re_up = cam.center.re + ((y as f64 - rows_f / 2.0) * y_scale);
-        let im_up = cam.center.im + ((y as f64 - rows_f / 2.0) * x_scale);
+    // --- rendering loop ----------------------------------------------------
+    let mut lines: Vec<String> = Vec::with_capacity(rows as usize);
 
-        // lower pixel (row y+1)
-        let re_down = cam.center.re + (((y as f64 + 1.0) - rows_f / 2.0) * y_scale);
-        let im_down = cam.center.im + (((y as f64 + 1.0) - rows_f / 2.0) * x_scale);
+    for term_y in 0..rows {
+        // image rows that map to this terminal line
+        let y_up   = (term_y as f64) * 2.0;   // first row of the pair
+        let y_down = y_up + 1.0;              // second row
 
-        // compute colours for both rows
-        let up_color = iteration_to_rgb(
-            mandelbrot_iter(Complex64::new(re_up, im_up), MAX_ITER),
-            MAX_ITER,
-        );
-        let down_color = iteration_to_rgb(
-            mandelbrot_iter(Complex64::new(re_down, im_down), MAX_ITER),
-            MAX_ITER,
-        );
+        let mut line = String::with_capacity((cols as usize) * 12);
 
-        // build the line – one char per column
-        let mut line = String::with_capacity(cols as usize * 12);
+        for term_x in 0..cols {
+            let x = term_x as f64;
 
-        for x in 0..cols {
-            let re = cam.center.re + ((x as f64 - cols_f / 2.0) * x_scale);
-            let im = cam.center.im + ((y as f64 - rows_f / 2.0) * y_scale);
-            // upper half (foreground)
-            line.push_str(&fg(up_color.0, up_color.1, up_color.2));
-            // lower half (background)
-            line.push_str(&bg(down_color.0, down_color.1, down_color.2));
-            line.push('▀');                     // U+2580
+            // common real coordinate (same for upper & lower pixel)
+            let re = cam.center.re + ((x - img_cols / 2.0) * x_scale);
+
+            // imaginary coordinates
+            let im_up   = cam.center.im + ((y_up   - img_rows / 2.0) * y_scale);
+            let im_down = cam.center.im + ((y_down - img_rows / 2.0) * y_scale);
+
+            // colours for the two rows
+            let up_col  = iteration_to_rgb(mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER);
+            let down_col = iteration_to_rgb(mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER);
+
+            // foreground → upper half
+            line.push_str(&fg(up_col.0, up_col.1, up_col.2));
+            // background → lower half
+            line.push_str(&bg(down_col.0, down_col.1, down_col.2));
+            line.push('▀');   // U+2580  “upper half block”
         }
 
-        // reset colours before the newline
-        line.push_str(RESET);
-        out_lines.push(line);
+        line.push_str(RESET);          // reset colours before newline
+        lines.push(line);
     }
 
-    // join with CRLF – keeps terminal positioning stable
-    out_lines.join("\r\n") + "\r\n"
+    // join all lines – use CRLF to keep the cursor stable on Windows/macOS too.
+    lines.join("\r\n") + "\r\n"
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
