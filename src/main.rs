@@ -280,12 +280,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('+') | KeyCode::Char('=') => { cam.zoom_in(); need_redraw = true },
                     KeyCode::Char('-') | KeyCode::Char('_') => { cam.zoom_out(); need_redraw = true },
-                    KeyCode::Up | KeyCode::Char('w')   => { cam.move_center(0.0, -1.0); need_redraw = true },
-                    KeyCode::Down | KeyCode::Char('s') => { cam.move_center(0.0,  1.0); need_redraw = true },
-                    KeyCode::Left | KeyCode::Char('a') => { cam.move_center(-1.0, 0.0); need_redraw = true },
-                    KeyCode::Right| KeyCode::Char('d') => { cam.move_center(1.0, 0.0); need_redraw = true },
+                    KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('k') => { cam.move_center(0.0, -1.0); need_redraw = true },
+                    KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('j') => { cam.move_center(0.0,  1.0); need_redraw = true },
+                    KeyCode::Left | KeyCode::Char('a') | KeyCode::Char('h') => { cam.move_center(-1.0, 0.0); need_redraw = true },
+                    KeyCode::Right| KeyCode::Char('d') | KeyCode::Char('l') => { cam.move_center(1.0, 0.0); need_redraw = true },
 
-                    KeyCode::Char('k') => {
+                    KeyCode::Char('p') => {
                         save_screenshot(&cam)?;
                         need_redraw = true;
                     }
