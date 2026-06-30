@@ -6,10 +6,10 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode},
     execute,
-    terminal::{self},
+    terminal::{self, ClearType},
 };
 use num_complex::Complex64;
-use std::io::{stdout, Write};
+use std::{io::{Write, stdout}};
 
 const MAX_ITER: u32 = 1000;
 
@@ -37,15 +37,13 @@ impl Camera {
     fn zoom_out(&mut self) { self.zoom *= 1.1; }
 }
 
-// true‑colour escape codes – foreground (48) and background (38)
 fn fg(r: u8, g: u8, b: u8) -> String {
     format!("\x1b[38;2;{};{};{}m", r, g, b)
 }
+
 fn bg(r: u8, g: u8, b: u8) -> String {
     format!("\x1b[48;2;{};{};{}m", r, g, b)
 }
-// reset all attributes
-const RESET: &str = "\x1b[0m";
 
 // --- Color palette ------------------------------------------------------------
 //      iter    : current iteration number (0 .. MAX_ITER)
@@ -93,12 +91,6 @@ fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
     let b = (b_raw * brightness * 255.0) as u8;
 
     (r, g, b)
-}
-
-/// Wrapper for the terminal renderer
-fn get_rgb_color(iter: u32) -> String {
-    let (r, g, b) = iteration_to_rgb(iter, MAX_ITER);
-    format!("\x1b[38;2;{};{};{}m", r, g, b)
 }
 
 fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
@@ -181,47 +173,6 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     Ok(())
 }
 
-fn render(cam: &Camera) -> String {
-    let (cols, rows) = terminal::size().unwrap_or((80, 24));
-    let width = cols as f64;
-    let height = rows as f64;
-
-    let aspect_correction = 2.0;
-    let x_scale = cam.zoom * (3.5 / width);
-    let y_scale = cam.zoom * (2.0 / height) * aspect_correction;
-
-    // We'll build a vector of lines, then join them at the end
-    let lines: Vec<String> = (0..rows).into_par_iter().map(|y| {
-        let mut line = String::with_capacity(cols as usize * 12);
-        for x in 0..cols {
-            let re = cam.center.re + (x as f64 - width / 2.0) * x_scale;
-            let im = cam.center.im + (y as f64 - height / 2.0) * y_scale;
-
-            let c = Complex64::new(re, im);
-            let mut z = Complex64::new(0.0, 0.0);
-            let mut i = 0;
-
-            while i < MAX_ITER && z.norm_sqr() <= 4.0 {
-                z = z * z + c;
-                i += 1;
-            }
-
-            line.push_str(&get_rgb_color(i));
-            line.push('█');
-        }
-        line
-    }).collect();
-
-    // Join all lines with the required CRLF sequence
-    let mut buffer = String::new();
-    for l in lines {
-        buffer.push_str(&l);
-        buffer.push('\n');
-        buffer.push('\r');
-    }
-    buffer
-}
-
 fn mandelbrot_iter(c: Complex64, max_iter: u32) -> u32 {
     let mut z = Complex64::new(0.0, 0.0);
     let mut i = 0;
@@ -235,7 +186,7 @@ fn mandelbrot_iter(c: Complex64, max_iter: u32) -> u32 {
     i
 }
 
-fn _p1_render_half(cam: &Camera) -> String {
+fn p1_render_half(cam: &Camera) -> String {
     let (cols, rows) = terminal::size().unwrap_or((80, 24));
 
     let img_rows = rows as f64 * 2.0;
@@ -245,32 +196,30 @@ fn _p1_render_half(cam: &Camera) -> String {
     let y_scale = cam.zoom * (2.0 / img_rows);
 
     // parallel over terminal lines
-    let lines: Vec<String> = (0..rows)
-        .into_par_iter()
-        .map(|term_y| {
-            let y_up   = term_y as f64 * 2.0;
-            let y_down = y_up + 1.0;
+    let lines: Vec<String> = (0..rows).into_par_iter().map(|term_y| {
+        let y_up   = term_y as f64 * 2.0;
+        let y_down = y_up + 1.0;
 
-            let mut line = String::with_capacity((cols as usize) * 12);
+        let mut line = String::with_capacity((cols as usize) * 12);
 
-            for term_x in 0..cols {
-                let x      = term_x as f64;
-                let re     = cam.center.re + ((x - img_cols / 2.0) * x_scale);
-                let im_up   = cam.center.im + ((y_up   - img_rows / 2.0) * y_scale);
-                let im_down = cam.center.im + ((y_down - img_rows / 2.0) * y_scale);
+        for term_x in 0..cols {
+            let x      = term_x as f64;
+            let re     = cam.center.re + ((x - img_cols / 2.0) * x_scale);
+            let im_up   = cam.center.im + ((y_up   - img_rows / 2.0) * y_scale);
+            let im_down = cam.center.im + ((y_down - img_rows / 2.0) * y_scale);
 
-                let up_col    = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER,);
-                let down_col  = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER,);
+            let up_col    = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER,);
+            let down_col  = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER,);
 
-                line.push_str(&fg(up_col.0, up_col.1, up_col.2));
-                line.push_str(&bg(down_col.0, down_col.1, down_col.2));
-                line.push('▀');
-            }
+            line.push_str(&fg(up_col.0, up_col.1, up_col.2));
+            line.push_str(&bg(down_col.0, down_col.1, down_col.2));
+            line.push('▀');
+        }
 
-            line.push_str(RESET);
-            line
-        })
-        .collect();
+        //line.push_str(RESET);
+        line
+    })
+    .collect();
 
     lines.join("\r\n") + "\r\n"
 }
@@ -285,86 +234,25 @@ fn _p2_render_half(cam: &Camera) -> String {
     let y_scale = cam.zoom * (2.0 / img_rows);
 
     // parallel over terminal lines
-    let lines: Vec<String> = (0..rows)
-        .into_par_iter()
-        .map(|term_y| {
-            let y_up   = term_y as f64 * 2.0;
-            let y_down = y_up + 1.0;
+    let lines: Vec<String> = (0..rows).into_par_iter().map(|term_y| {
+        let y_up   = term_y as f64 * 2.0;
+        let y_down = y_up + 1.0;
 
-            (0..cols)
-                .into_par_iter()
-                .map(|term_x| {
-                    let x      = term_x as f64;
-                    let re     = cam.center.re + ((x - img_cols / 2.0) * x_scale);
-                    let im_up   = cam.center.im + ((y_up   - img_rows / 2.0) * y_scale);
-                    let im_down = cam.center.im + ((y_down - img_rows / 2.0) * y_scale);
-
-                    let up_col    = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER);
-                    let down_col  = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER);
-
-                    // Build the tiny string fragment for this column
-                    format!("{}{}▀",
-                        fg(up_col.0, up_col.1, up_col.2),
-                        bg(down_col.0, down_col.1, down_col.2))
-                })
-            .collect::<String>()   // concat all column fragments into one line
-        })
-    .collect();
-
-    lines.join("\r\n") + "\r\n"
-}
-
-fn render_half(cam: &Camera) -> String {
-    // terminal size in character cells
-    let (cols, rows) = terminal::size().unwrap_or((80, 24));
-
-    // Each terminal row represents two image rows.
-    // We therefore need twice the vertical resolution.
-    let img_rows = rows as f64 * 2.0;
-    let img_cols = cols as f64;
-
-    // --- scaling ------------------------------------------------------------
-    // The Mandelbrot domain is roughly [-2.5, +1] × [-1, +1].
-    // We map that onto the pixel grid.
-    let x_scale = cam.zoom * (3.5 / img_cols);          // width   : 3.5
-    let y_scale = cam.zoom * (2.0  / img_rows);         // height  : 2.0
-
-    // --- rendering loop ----------------------------------------------------
-    let mut lines: Vec<String> = Vec::with_capacity(rows as usize);
-
-    for term_y in 0..rows {
-        // image rows that map to this terminal line
-        let y_up   = (term_y as f64) * 2.0;   // first row of the pair
-        let y_down = y_up + 1.0;              // second row
-
-        let mut line = String::with_capacity((cols as usize) * 12);
-
-        for term_x in 0..cols {
-            let x = term_x as f64;
-
-            // common real coordinate (same for upper & lower pixel)
-            let re = cam.center.re + ((x - img_cols / 2.0) * x_scale);
-
-            // imaginary coordinates
+        (0..cols).into_par_iter().map(|term_x| {
+            let x      = term_x as f64;
+            let re     = cam.center.re + ((x - img_cols / 2.0) * x_scale);
             let im_up   = cam.center.im + ((y_up   - img_rows / 2.0) * y_scale);
             let im_down = cam.center.im + ((y_down - img_rows / 2.0) * y_scale);
 
-            // colours for the two rows
-            let up_col  = iteration_to_rgb(mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER);
-            let down_col = iteration_to_rgb(mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER);
+            let up_col    = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_up), MAX_ITER), MAX_ITER);
+            let down_col  = iteration_to_rgb( mandelbrot_iter(Complex64::new(re, im_down), MAX_ITER), MAX_ITER);
 
-            // foreground → upper half
-            line.push_str(&fg(up_col.0, up_col.1, up_col.2));
-            // background → lower half
-            line.push_str(&bg(down_col.0, down_col.1, down_col.2));
-            line.push('▀');   // U+2580  “upper half block”
-        }
+            format!("{}{}▀", fg(up_col.0, up_col.1, up_col.2), bg(down_col.0, down_col.1, down_col.2))
+        })
+        .collect::<String>()   // concat all column fragments into one line
+    })
+    .collect();
 
-        line.push_str(RESET);          // reset colours before newline
-        lines.push(line);
-    }
-
-    // join all lines – use CRLF to keep the cursor stable on Windows/macOS too.
     lines.join("\r\n") + "\r\n"
 }
 
@@ -375,29 +263,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal::enable_raw_mode()?;
     execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
-    loop {
-        let frame = _p2_render_half(&cam);
-        execute!(stdout, cursor::MoveTo(0, 0))?;
-        write!(stdout, "{}", frame)?;
-        write!(stdout, "\x1b[0m [WASD/Arrows]: Move | +/-: Zoom | Q: Quit | Zoom: {:.4}", cam.zoom)?;
-        stdout.flush()?;
+    // We'll keep the last frame around so we can avoid an expensive
+    // re‑render when nothing changed.
+    let mut last_frame = String::new();
+    let mut need_redraw = true;          // first time we always draw
 
-        if event::poll(std::time::Duration::from_millis(16))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
+    loop {
+        if event::poll(std::time::Duration::from_millis(0))? {
+            match event::read()? {
+                Event::Key(key) => match key.code {
                     KeyCode::Char('q') => break,
+                    KeyCode::Char('+') | KeyCode::Char('=') => { cam.zoom_in(); need_redraw = true },
+                    KeyCode::Char('-') | KeyCode::Char('_') => { cam.zoom_out(); need_redraw = true },
+                    KeyCode::Up | KeyCode::Char('w')   => { cam.move_center(0.0, -1.0); need_redraw = true },
+                    KeyCode::Down | KeyCode::Char('s') => { cam.move_center(0.0,  1.0); need_redraw = true },
+                    KeyCode::Left | KeyCode::Char('a') => { cam.move_center(-1.0, 0.0); need_redraw = true },
+                    KeyCode::Right| KeyCode::Char('d') => { cam.move_center(1.0, 0.0); need_redraw = true },
+
                     KeyCode::Char('k') => {
-                        save_screenshot(&cam).expect("Failed to save screenshot");
+                        save_screenshot(&cam)?;
+                        need_redraw = true;
                     }
-                    KeyCode::Char('+') | KeyCode::Char('=') => cam.zoom_in(),
-                    KeyCode::Char('-') | KeyCode::Char('_') => cam.zoom_out(),
-                    KeyCode::Up | KeyCode::Char('w') => cam.move_center(0.0, -1.0),
-                    KeyCode::Down | KeyCode::Char('s') => cam.move_center(0.0, 1.0),
-                    KeyCode::Left | KeyCode::Char('a') => cam.move_center(-1.0, 0.0),
-                    KeyCode::Right | KeyCode::Char('d') => cam.move_center(1.0, 0.0),
                     _ => {}
+                },
+                Event::Resize(_, _) => {
+                    need_redraw = true;
                 }
+                _ => {} // ignore mouse, focus etc.
             }
+
+            if !need_redraw { continue; } // skip rendering this loop
+        }
+
+        if need_redraw {
+            let frame = p1_render_half(&cam);   // or any of your rendering functions
+            if frame != last_frame {
+                execute!(
+                    stdout,
+                    cursor::MoveTo(0, 0),
+                    terminal::Clear(ClearType::All)
+                )?;
+                write!(stdout, "{}", frame)?;
+                write!(stdout, "\x1b[0m [WASD/Arrows]: Move | +/-: Zoom | Q: Quit | Zoom: {:.4}", cam.zoom)?;
+                stdout.flush()?;
+
+                last_frame = frame;
+            }
+
+            need_redraw = false; // reset the flag until we get another event
         }
     }
 
