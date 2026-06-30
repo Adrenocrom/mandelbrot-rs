@@ -51,48 +51,29 @@ fn timestamp() -> String {
     Local::now().format("%Y%m%d_%H%M%S").to_string()
 }
 
-// --- Color palette ------------------------------------------------------------
-//      iter    : current iteration number (0 .. MAX_ITER)
-//      MAX_ITER: maximum iterations (a constant)
-// Returns an RGB tuple for this point.
 fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
-    // 1. Inside the set → black
     if iter == max_iter {
         return (1, 1, 1);
     }
 
-    // 2. Normalise iteration count to [0,1]
     let norm = iter as f64 / max_iter as f64;          // < 1
 
-    // 3. Reduce red contribution.
-    //    We lower the base intensity by a constant factor (0.8),
-    //    and later we apply a brightness curve that further dims it.
-    const RED_FACTOR: f64 = 0.8;
-
-    // 4. A simple HSV→RGB conversion:
-    //      Hue is swept from 120° (green) → 240° (blue).
-    //      Saturation and value are kept at 1.0 for a vivid colour,
-    //      but we modulate the final brightness with sqrt(norm)
     let hue_deg = 120.0 + norm * 120.0;     // 120 .. 240
     let h = hue_deg / 60.0;                 // segment index [2,4]
     let f = h - (h as i32) as f64;
-    let p = 0.0;
     let t = f;
 
     // Interpolate RGB based on hue segment
     let (r_raw, g_raw, b_raw) = if h < 3.0 {
         // segment 2 → green→cyan: R=0, G=1, B=f
-        (p, t, 1.0)
+        (1.0, 0.0, t)
     } else {
         // segment 4 → cyan→blue: R=p, G=t, B=1
-        (t, 1.0, t)
+        (1.0, 0.0, t)
     };
 
-    // 5. Apply the RED_FACTOR and a smooth brightness curve.
-    //let brightness = norm.sqrt();          // sqrt gives nicer fade at low iterations
-    let brightness = norm.powf(0.5); 
-
-    let r = (r_raw * RED_FACTOR * brightness * 255.0) as u8;
+    let brightness = norm.powf(0.7); 
+    let r = (r_raw * brightness * 255.0) as u8;
     let g = (g_raw * brightness * 255.0) as u8;
     let b = (b_raw * brightness * 255.0) as u8;
 
