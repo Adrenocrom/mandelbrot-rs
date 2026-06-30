@@ -58,7 +58,7 @@ fn timestamp() -> String {
 fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
     // 1. Inside the set → black
     if iter == max_iter {
-        return (0, 0, 0);
+        return (1, 1, 1);
     }
 
     // 2. Normalise iteration count to [0,1]
@@ -100,6 +100,11 @@ fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
 }
 
 fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
+    let mut stdout = stdout();
+    execute!( stdout, cursor::MoveToColumn(0), terminal::Clear(ClearType::CurrentLine))?;
+    print!("Creating screenshot");
+    stdout.flush()?;
+
     let width = 4096;
     let height = 2304;
     let timestamp = timestamp();                     // ← from the helper above
@@ -115,16 +120,8 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
         for x in 0..width {
             let re = cam.center.re + (x as f64 - width as f64 / 2.0) * x_scale;
             let im = cam.center.im + (y as f64 - height as f64 / 2.0) * y_scale;
-
-            let c = Complex64::new(re, im);
-            let mut z = Complex64::new(0.0, 0.0);
-            let mut i = 0;
-
-            while i < MAX_ITER && z.norm_sqr() <= 4.0 {
-                z = z * z + c;
-                i += 1;
-            }
-
+            
+            let i = mandelbrot_iter(Complex64::new(re, im), MAX_ITER);
             pixel_data.push((iteration_to_rgb(i, MAX_ITER), i));
         }
     }
@@ -176,7 +173,8 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
         img.put_pixel(x, y, image::Rgb([pixel.0, pixel.1, pixel.2]));
     }
     let _ = img.save(&filename);
-    println!("\nScreenshot saved (selective blur) to {}", &filename);
+    print!(" - Screenshot saved to {}", &filename);
+    stdout.flush()?;
     Ok(())
 }
 

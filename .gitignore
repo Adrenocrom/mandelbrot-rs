@@ -1,1 +1,4 @@
 mandelbrot_screenshot.ppm
+target/
+Cargo.lock
+mandelbrot_*.png
