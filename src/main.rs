@@ -58,17 +58,15 @@ struct ColorStop {
 
 fn get_palette() -> Vec<ColorStop> {
     vec![
-        ColorStop { position: 0.0, color: (0.0, 0.0, 0.5) }, // Deep Blue
-        ColorStop { position: 0.25, color: (0.0, 1.0, 0.0) }, // Green
-        ColorStop { position: 0.5, color: (1.0, 1.0, 1.0) },   // White
-        ColorStop { position: 0.75, color: (1.0, 0.0, 0.0) },  // Red
-        ColorStop { position: 1.0, color: (0.2, 0.0, 0.0) },   // Dark Red (end)
+        ColorStop { position: 0.0, color: (0.0, 0.0, 0.1) }, // Deep Blue
+        ColorStop { position: 0.75, color: (0.0, 1.0, 0.5) },  // Red
+        ColorStop { position: 1.0, color: (1.0, 1.0, 1.0) },   // Dark Red (end)
     ]
 }
 
 pub fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
     if iter >= max_iter {
-        return (0, 0, 0); // The Mandelbrot set itself is black
+        return (1, 1, 1); // The Mandelbrot set itself is black
     }
 
     // t is our position in the gradient (0.0 to 1.0)
@@ -100,7 +98,7 @@ pub fn iteration_to_rgb(iter: u32, max_iter: u32) -> (u8, u8, u8) {
     let b = stop_low.color.2 + local_t * (stop_high.color.2 - stop_low.color.2);
 
     // 4. Apply Gamma Correction for better visual contrast
-    let gamma_correct = |x: f64| ((x.powf(1.0 / 2.2) * 255.0).clamp(0.0, 255.0)) as u8;
+    let gamma_correct = |x: f64| ((x.powf(0.9) * 255.0).clamp(0.0, 255.0)) as u8;
 
     (gamma_correct(r), gamma_correct(g), gamma_correct(b))
 }
