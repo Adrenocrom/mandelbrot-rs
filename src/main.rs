@@ -37,26 +37,15 @@ impl Camera {
     fn zoom_out(&mut self) { self.zoom *= 1.1; }
 }
 
-fn _get_rgb_values(iter: u32) -> (u8, u8, u8) {
-    if iter == MAX_ITER {
-        return (0, 0, 0); // Black for inside the set
-    }
-
-    let norm_t = iter as f64 / MAX_ITER as f64;
-    let t = norm_t.powf(0.5) * 10.0;
-    
-    let r_raw = 255.0 * (0.5 * (1.0 - t + 4.0).sin() + 0.5);
-    let b_raw = 255.0 * (0.5 * (1.0 - t).sin() + 0.5);
-    let g_raw = 255.0 * (0.5 * (1.0 - t + 2.0).sin() + 0.5);
-
-    let brightness = norm_t.powf(0.5); 
-    
-    (
-        (r_raw * brightness) as u8,
-        (g_raw * brightness) as u8,
-        (b_raw * brightness) as u8,
-    )
+// true‑colour escape codes – foreground (48) and background (38)
+fn fg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[38;2;{};{};{}m", r, g, b)
 }
+fn bg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[48;2;{};{};{}m", r, g, b)
+}
+// reset all attributes
+const RESET: &str = "\x1b[0m";
 
 // --- Color palette ------------------------------------------------------------
 //      iter    : current iteration number (0 .. MAX_ITER)
@@ -233,6 +222,74 @@ fn render(cam: &Camera) -> String {
     buffer
 }
 
+fn mandelbrot_iter(c: Complex64, max_iter: u32) -> u32 {
+    let mut z = Complex64::new(0.0, 0.0);
+    let mut i = 0;
+
+    // We grow the escape radius exponentially with each step.
+    // If |z| > R*2^k we can stop because it will never get back inside.
+    while i < max_iter && z.norm_sqr() <= 4.0 {
+        z = z * z + c;
+        i += 1;
+    }
+    i
+}
+
+fn render_half(cam: &Camera) -> String {
+    // terminal size in *cells*
+    let (cols, rows) = terminal::size().unwrap_or((80, 24));
+    let cols_f = cols as f64;
+    let rows_f = rows as f64;
+
+    // We will combine two image rows into one terminal line,
+    // so the vertical scale must be halved.
+    let aspect_correction = 2.0;                // to keep the shape square
+    let x_scale = cam.zoom * (3.5 / cols_f);
+    let y_scale = cam.zoom * (2.0 / rows_f) * aspect_correction;
+
+    let mut out_lines: Vec<String> = Vec::with_capacity(rows.into());
+
+    for y in 0..rows {
+        // upper pixel (row y)
+        let re_up = cam.center.re + ((y as f64 - rows_f / 2.0) * y_scale);
+        let im_up = cam.center.im + ((y as f64 - rows_f / 2.0) * x_scale);
+
+        // lower pixel (row y+1)
+        let re_down = cam.center.re + (((y as f64 + 1.0) - rows_f / 2.0) * y_scale);
+        let im_down = cam.center.im + (((y as f64 + 1.0) - rows_f / 2.0) * x_scale);
+
+        // compute colours for both rows
+        let up_color = iteration_to_rgb(
+            mandelbrot_iter(Complex64::new(re_up, im_up), MAX_ITER),
+            MAX_ITER,
+        );
+        let down_color = iteration_to_rgb(
+            mandelbrot_iter(Complex64::new(re_down, im_down), MAX_ITER),
+            MAX_ITER,
+        );
+
+        // build the line – one char per column
+        let mut line = String::with_capacity(cols as usize * 12);
+
+        for x in 0..cols {
+            let re = cam.center.re + ((x as f64 - cols_f / 2.0) * x_scale);
+            let im = cam.center.im + ((y as f64 - rows_f / 2.0) * y_scale);
+            // upper half (foreground)
+            line.push_str(&fg(up_color.0, up_color.1, up_color.2));
+            // lower half (background)
+            line.push_str(&bg(down_color.0, down_color.1, down_color.2));
+            line.push('▀');                     // U+2580
+        }
+
+        // reset colours before the newline
+        line.push_str(RESET);
+        out_lines.push(line);
+    }
+
+    // join with CRLF – keeps terminal positioning stable
+    out_lines.join("\r\n") + "\r\n"
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = stdout();
     let mut cam = Camera::new();
@@ -241,7 +298,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
     loop {
-        let frame = render(&cam);
+        let frame = render_half(&cam);
         execute!(stdout, cursor::MoveTo(0, 0))?;
         write!(stdout, "{}", frame)?;
         write!(stdout, "\x1b[0m [WASD/Arrows]: Move | +/-: Zoom | Q: Quit | Zoom: {:.4}", cam.zoom)?;
