@@ -1,5 +1,7 @@
 use rayon::prelude::*;
 
+use image::{RgbImage, ImageBuffer};
+
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode},
@@ -7,8 +9,7 @@ use crossterm::{
     terminal::{self},
 };
 use num_complex::Complex64;
-use std::fs::File;
-use std::io::{stdout, Write, BufWriter};
+use std::io::{stdout, Write};
 
 const MAX_ITER: u32 = 1000;
 
@@ -114,7 +115,7 @@ fn get_rgb_color(iter: u32) -> String {
 fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
     let width = 4096;
     let height = 2304;
-    let filename = "mandelbrot_screenshot.ppm";
+    let filename = "mandelbrot_screenshot_time.png";
 
     let x_scale = cam.zoom * (3.5 / width as f64);
     let y_scale = cam.zoom * (2.0 / height as f64);
@@ -180,15 +181,13 @@ fn save_screenshot(cam: &Camera) -> std::io::Result<()> {
         }
     }
 
-    let file = File::create(filename)?;
-    let mut writer = BufWriter::new(file);
-
-    writeln!(writer, "P3\n{} {}\n255", width, height)?;
-
-    for (r, g, b) in final_pixels {
-        writeln!(writer, "{} {} {}", r, g, b)?;
+    let mut img: RgbImage = ImageBuffer::new(width as u32, height as u32);
+    for (i, pixel) in final_pixels.iter().enumerate() {
+        let x = (i % width) as u32;
+        let y = (i / width) as u32;
+        img.put_pixel(x, y, image::Rgb([pixel.0, pixel.1, pixel.2]));
     }
-
+    let _ = img.save(filename);
     println!("\nScreenshot saved (selective blur) to {}", filename);
     Ok(())
 }
